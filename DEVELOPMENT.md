@@ -252,7 +252,14 @@ histHost$(10) LENGTH 64     =    650 bytes
 histSelector$(10) LENGTH 128=  1,290 bytes
 histPort(10)                =     80 bytes
 tcpResponseBuffer%(1000)    =  8,000 bytes
-Total ≈ 49 KB (of ~100-160 KB available)
+searchHistQuery$(5) LEN 128 =    645 bytes
+searchHistHost$(5) LEN 64   =    325 bytes
+searchHistPort(5)           =     40 bytes
+recentDisp$(10) LENGTH 40   =    410 bytes
+recentHost$(10) LENGTH 64   =    650 bytes
+recentSel$(10) LENGTH 128   =  1,290 bytes
+recentPort(10)              =     80 bytes
+Total ≈ 52 KB (of ~100-160 KB available)
 ```
 
 **CRITICAL**: Always use `DIM array$(n) LENGTH m` for string arrays.
@@ -611,10 +618,10 @@ Before releasing a new version:
 
 ## Future Roadmap
 
-### Short Term (v1.1)
-- [ ] Better error messages with recovery options
-- [ ] Search history feature
-- [ ] Recently visited list
+### Short Term (v1.1) -- DONE
+- [x] Better error messages with recovery options
+- [x] Search history feature
+- [x] Recently visited list
 
 ### Medium Term (v1.2)
 - [ ] Image file support (type g)
@@ -629,5 +636,5 @@ Before releasing a new version:
 
 ---
 
-**Last Updated**: February 10, 2025
+**Last Updated**: February 11, 2026
 **Maintained By**: Development Team

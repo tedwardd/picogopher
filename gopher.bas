@@ -1,9 +1,9 @@
 ' gopher.bas - PicoGopher Client for PicoMite
 ' ================================================
 ' A Gopher protocol browser for Raspberry Pi Pico with WiFi
-' Version: 1.0
+' Version: 1.1
 ' Author: Claude
-' Last Modified: 2025-02-10
+' Last Modified: 2026-02-11
 '
 ' Dependencies:
 '   - PicoMite firmware with WebMite support
@@ -15,7 +15,7 @@
 ' CONFIGURATION & CONSTANTS
 ' ================================================
 
-CONST VERSION$ = "1.0"
+CONST VERSION$ = "1.1"
 CONST DEFAULT_HOST$ = "gopher.floodgap.com"
 CONST DEFAULT_PORT = 70
 
@@ -35,6 +35,8 @@ CONST MAX_MENU_ITEMS = 80
 CONST MAX_TEXT_LINES = 400
 CONST MAX_HISTORY = 10
 CONST MAX_BOOKMARKS = 30
+CONST MAX_SEARCH_HIST = 5
+CONST MAX_RECENT = 10
 
 ' String constants
 CONST CRLF$ = CHR$(13) + CHR$(10)
@@ -49,7 +51,9 @@ CONST TAB$ = CHR$(9)
 ' Text viewer:  400 x 41                    = ~16.0 KB
 ' History:       10 x (65+129) + 10x8       =  ~2.0 KB
 ' TCP buffer:  1000 x 8                     =  ~8.0 KB
-' Estimated total:                           ~48.8 KB
+' Search hist:   5 x (129+65) + 5x8         =  ~1.0 KB
+' Recent list:  10 x (41+65+129) + 10x8     =  ~2.4 KB
+' Estimated total:                           ~52.2 KB
 ' ----------------------------------
 
 ' Menu display arrays
@@ -88,11 +92,25 @@ DIM statusTimeout AS INTEGER
 DIM menuDirty AS INTEGER
 DIM textDirty AS INTEGER
 DIM bookmarkDirty AS INTEGER
+DIM lastError$ LENGTH 80
 
 ' Text viewer state (word-wrapped at load time, so lines fit CHARS_PER_LINE)
 DIM textLines$(MAX_TEXT_LINES) LENGTH 40      ' 400 x  41 = 16,400 bytes
 DIM textLineCount AS INTEGER
 DIM scrollPos AS INTEGER
+
+' Search history (ring buffer of recent search queries)
+DIM searchHistQuery$(MAX_SEARCH_HIST) LENGTH 128  '  5 x 129 =    645 bytes
+DIM searchHistHost$(MAX_SEARCH_HIST) LENGTH 64    '  5 x  65 =    325 bytes
+DIM searchHistPort(MAX_SEARCH_HIST)               '  5 x   8 =     40 bytes
+DIM searchHistCount AS INTEGER
+
+' Recently visited pages (viewable list, not destructively popped)
+DIM recentDisp$(MAX_RECENT) LENGTH 40     ' 10 x  41 =    410 bytes
+DIM recentHost$(MAX_RECENT) LENGTH 64     ' 10 x  65 =    650 bytes
+DIM recentSel$(MAX_RECENT) LENGTH 128     ' 10 x 129 =  1,290 bytes
+DIM recentPort(MAX_RECENT)                ' 10 x   8 =     80 bytes
+DIM recentCount AS INTEGER
 
 ' ================================================
 ' PHASE 1: NETWORK & PROTOCOL
@@ -120,6 +138,7 @@ END SUB
 
 SUB GopherConnect(host$, port)
   ' Connect to Gopher server
+  ' Sets tcpConnected and lastError$ for caller to check
 
   ON ERROR IGNORE
   WEB OPEN TCP CLIENT host$, port
@@ -127,17 +146,17 @@ SUB GopherConnect(host$, port)
 
   IF MM.ERRNO <> 0 THEN
     tcpConnected = 0
-    CLS
-    PRINT @(10, 100) "Connect error: " + STR$(MM.ERRNO)
-    PAUSE 3000
+    lastError$ = "Could not connect to " + LEFT$(host$, 40)
   ELSE
     tcpConnected = 1
+    lastError$ = ""
   ENDIF
 END SUB
 
 SUB GopherSend(selector$)
   ' Send Gopher request and read response into buffer
   ' Format: selector\r\n
+  ' Sets lastError$ for caller to check (empty = success)
 
   tcpResponsePos = 0  ' Reset response position
 
@@ -146,11 +165,9 @@ SUB GopherSend(selector$)
   ON ERROR ABORT
 
   IF MM.ERRNO <> 0 THEN
-    CLS
-    PRINT @(10, 100) "Request error: " + STR$(MM.ERRNO)
-    PRINT @(10, 115) "Host: " + currentHost$
-    PRINT @(10, 130) "Selector: [" + selector$ + "]"
-    PAUSE 3000
+    lastError$ = "Request failed (error " + STR$(MM.ERRNO) + ")"
+  ELSE
+    lastError$ = ""
   ENDIF
 END SUB
 
@@ -206,6 +223,42 @@ SUB GopherClose()
   tcpConnected = 0
   ON ERROR ABORT
 END SUB
+
+FUNCTION ShowError$(title$, detail$)
+  ' Display an error screen with recovery options.
+  ' Returns "R" (retry), "B" (back), "^" (home), or "G" (go to address).
+
+  LOCAL key$
+
+  CLS
+  PRINT @(10, 60) "--- Error ---"
+  PRINT @(10, 80) LEFT$(title$, 38)
+  IF LEN(detail$) > 0 THEN
+    PRINT @(10, 100) LEFT$(detail$, 38)
+  ENDIF
+  PRINT @(10, 140) "R = Retry"
+  PRINT @(10, 155) "B = Go Back"
+  PRINT @(10, 170) "^ = Go Home"
+  PRINT @(10, 185) "G = Go to address"
+
+  DO
+    key$ = INKEY$
+    IF key$ = "R" OR key$ = "r" THEN
+      ShowError$ = "R"
+      EXIT FUNCTION
+    ELSEIF key$ = "B" OR key$ = "b" THEN
+      ShowError$ = "B"
+      EXIT FUNCTION
+    ELSEIF key$ = "^" THEN
+      ShowError$ = "^"
+      EXIT FUNCTION
+    ELSEIF key$ = "G" OR key$ = "g" THEN
+      ShowError$ = "G"
+      EXIT FUNCTION
+    ENDIF
+    PAUSE 20
+  LOOP
+END FUNCTION
 
 ' ================================================
 ' PHASE 1: MENU PARSER
@@ -344,7 +397,7 @@ SUB DisplayMenu()
   IF LEN(statusMsg$) > 0 THEN
     statusText$ = statusMsg$
   ELSE
-    statusText$ = "^=Home  B=Back  A=Add  ESC=Bookmarks  G=Go  Q=Quit"
+    statusText$ = "^=Home B=Back G=Go Q=Quit ?=Help"
   ENDIF
 
   PRINT @(0, SCREEN_HEIGHT - 28) statusText$;
@@ -475,6 +528,22 @@ SUB HandleInput()
       GotoCustomAddress()
       menuDirty = 1
 
+    ' Recently visited
+    CASE "r"
+      menuScrollX = 0
+      ShowRecent()
+      menuDirty = 1
+
+    CASE "R"
+      menuScrollX = 0
+      ShowRecent()
+      menuDirty = 1
+
+    ' Help menu
+    CASE "?"
+      ShowHelp()
+      menuDirty = 1
+
     ' Quit
     CASE "q"
       running = 0
@@ -585,19 +654,46 @@ END SUB
 
 SUB ViewTextFile(host$, selector$, port)
   ' Display text file with scrolling
-  LOCAL line$, key$, viewingText, endOfData
+  ' Includes retry/back error recovery on connect or send failure
+  LOCAL line$, key$, viewingText, endOfData, choice$
 
-  CLS
-  PRINT @(10, 100) "Connecting to " + host$ + "..."
+  ' Connection retry loop
+  DO
+    CLS
+    PRINT @(10, 100) "Connecting to " + host$ + "..."
 
-  ' Connect and fetch file
-  GopherConnect(host$, port)
+    GopherConnect(host$, port)
 
-  IF tcpConnected = 0 THEN
-    EXIT SUB
-  ENDIF
+    IF tcpConnected = 0 THEN
+      choice$ = ShowError$("Connection Failed", lastError$)
+      IF choice$ = "R" THEN
+        ' Retry - loop continues
+      ELSE
+        ' Back or Home - return to menu (caller sets menuDirty)
+        EXIT SUB
+      ENDIF
+    ELSE
+      EXIT DO
+    ENDIF
+  LOOP
 
-  GopherSend(selector$)
+  ' Send request with retry
+  DO
+    GopherSend(selector$)
+
+    IF LEN(lastError$) > 0 THEN
+      GopherClose()
+      choice$ = ShowError$("Request Failed", lastError$)
+      IF choice$ = "R" THEN
+        GopherConnect(host$, port)
+        IF tcpConnected = 0 THEN EXIT SUB
+      ELSE
+        EXIT SUB
+      ENDIF
+    ELSE
+      EXIT DO
+    ENDIF
+  LOOP
 
   ' Read text lines from TCP response into array
   textLineCount = 0
@@ -619,6 +715,9 @@ SUB ViewTextFile(host$, selector$, port)
   LOOP
 
   GopherClose()
+
+  ' Track this text file in recently visited list
+  PushRecent(LEFT$(host$ + selector$, 40), host$, selector$, port)
 
   IF textLineCount = 0 THEN
     textLines$(0) = "(Empty document)"
@@ -775,34 +874,221 @@ SUB ShowBookmarks()
 END SUB
 
 ' ================================================
+' PHASE 4B: RECENTLY VISITED LIST
+' ================================================
+
+SUB PushRecent(disp$, host$, selector$, port)
+  ' Add a page to the recently visited list.
+  ' Shifts oldest entry out if full. Same pattern as PushHistory.
+
+  LOCAL i
+
+  IF recentCount >= MAX_RECENT THEN
+    ' Shift all entries down by one, dropping the oldest (index 0)
+    FOR i = 0 TO MAX_RECENT - 2
+      recentDisp$(i) = recentDisp$(i + 1)
+      recentHost$(i) = recentHost$(i + 1)
+      recentSel$(i) = recentSel$(i + 1)
+      recentPort(i) = recentPort(i + 1)
+    NEXT i
+    recentCount = MAX_RECENT - 1
+  ENDIF
+
+  recentDisp$(recentCount) = LEFT$(disp$, 40)
+  recentHost$(recentCount) = LEFT$(host$, 64)
+  recentSel$(recentCount) = LEFT$(selector$, 128)
+  recentPort(recentCount) = port
+  recentCount = recentCount + 1
+END SUB
+
+SUB ShowRecent()
+  ' Display the recently visited pages list.
+  ' Similar UI to ShowBookmarks - Up/Down, Enter, ESC.
+
+  LOCAL i, y, selected, selecting, key$, recentDirty
+
+  IF recentCount = 0 THEN
+    CLS
+    PRINT @(10, 100) "No recent pages"
+    PAUSE 2000
+    EXIT SUB
+  ENDIF
+
+  selected = recentCount - 1  ' Start at most recent
+  selecting = 1
+  recentDirty = 1
+
+  DO WHILE selecting
+    IF recentDirty = 1 THEN
+      recentDirty = 0
+      CLS
+      PRINT @(0, 10) "Recent Pages - Enter=Go, ESC=Cancel";
+      PRINT @(0, 22) STRING$(40, "-");
+
+      FOR i = 0 TO recentCount - 1
+        y = i * LINE_HEIGHT + 34
+
+        IF i = selected THEN
+          PRINT @(0, y) "> " + recentDisp$(i);
+        ELSE
+          PRINT @(0, y) "  " + recentDisp$(i);
+        ENDIF
+      NEXT i
+
+      PRINT @(0, SCREEN_HEIGHT - 14) "Page " + STR$(selected + 1) + "/" + STR$(recentCount);
+    ENDIF
+
+    key$ = INKEY$
+    IF key$ = "" THEN
+      PAUSE 10
+    ELSE
+      SELECT CASE key$
+        CASE CHR$(128)  ' Up
+          selected = MAX(0, selected - 1)
+          recentDirty = 1
+        CASE CHR$(129)  ' Down
+          selected = MIN(recentCount - 1, selected + 1)
+          recentDirty = 1
+        CASE CHR$(13)  ' Enter
+          PushHistory(currentHost$, currentSelector$, currentPort)
+          currentHost$ = recentHost$(selected)
+          currentSelector$ = recentSel$(selected)
+          currentPort = recentPort(selected)
+          FetchAndDisplayMenu()
+          selecting = 0
+        CASE CHR$(27)  ' Escape
+          selecting = 0
+      END SELECT
+    ENDIF
+  LOOP
+END SUB
+
+' ================================================
+' PHASE 4C: HELP MENU
+' ================================================
+
+SUB ShowHelp()
+  ' Display a full-screen help overlay with all key bindings.
+  ' Waits for any key press to dismiss.
+
+  LOCAL key$
+
+  CLS
+  PRINT @(0, 10) "PicoGopher v" + VERSION$ + " - Help";
+  PRINT @(0, 22) STRING$(40, "-");
+  PRINT @(10, 40) "Navigation:";
+  PRINT @(10, 55) "Up/Down     Navigate menu items"
+  PRINT @(10, 70) "Left/Right  Horizontal scroll"
+  PRINT @(10, 85) "Enter       Select item"
+  PRINT @(10, 100) "B           Go back"
+  PRINT @(10, 115) "^           Go to home server"
+  PRINT @(10, 135) "Features:";
+  PRINT @(10, 150) "G           Go to address"
+  PRINT @(10, 165) "A           Add bookmark"
+  PRINT @(10, 180) "ESC         View bookmarks"
+  PRINT @(10, 195) "R           Recently visited"
+  PRINT @(10, 215) "Other:";
+  PRINT @(10, 230) "Q           Quit"
+  PRINT @(10, 245) "?           This help screen"
+  PRINT @(0, SCREEN_HEIGHT - 28) "Press any key to close...";
+
+  ' Wait for any key
+  DO
+    key$ = INKEY$
+    IF key$ <> "" THEN EXIT DO
+    PAUSE 20
+  LOOP
+END SUB
+
+' ================================================
 ' PHASE 5: MAIN MENU FETCHER
 ' ================================================
 
 SUB FetchAndDisplayMenu()
   ' Fetch and display menu from current host/selector/port
+  ' Includes retry/back/home error recovery on connect or send failure
+
+  LOCAL choice$
 
   menuCount = 0
   selectedIndex = 0
   menuScrollX = 0
 
-  CLS
-  PRINT @(10, 100) "Loading menu from " + currentHost$ + "..."
+  ' Connection retry loop
+  DO
+    CLS
+    PRINT @(10, 100) "Loading menu from " + currentHost$ + "..."
 
-  ' Connect to server
-  GopherConnect(currentHost$, currentPort)
+    GopherConnect(currentHost$, currentPort)
 
-  IF tcpConnected = 0 THEN
-    menuDirty = 1
-    EXIT SUB
-  ENDIF
+    IF tcpConnected = 0 THEN
+      choice$ = ShowError$("Connection Failed", lastError$)
+      IF choice$ = "R" THEN
+        ' Retry - loop continues
+      ELSEIF choice$ = "B" THEN
+        NavigateBack()
+        EXIT SUB
+      ELSEIF choice$ = "G" THEN
+        GotoCustomAddress()
+        EXIT SUB
+      ELSE
+        ' Home
+        currentHost$ = DEFAULT_HOST$
+        currentSelector$ = "/"
+        currentPort = DEFAULT_PORT
+      ENDIF
+    ELSE
+      EXIT DO
+    ENDIF
+  LOOP
 
-  GopherSend(currentSelector$)
+  ' Send request with retry
+  DO
+    GopherSend(currentSelector$)
+
+    IF LEN(lastError$) > 0 THEN
+      GopherClose()
+      choice$ = ShowError$("Request Failed", lastError$)
+      IF choice$ = "R" THEN
+        ' Reconnect and retry
+        GopherConnect(currentHost$, currentPort)
+        IF tcpConnected = 0 THEN
+          choice$ = ShowError$("Connection Failed", lastError$)
+          IF choice$ = "B" THEN
+            NavigateBack()
+            EXIT SUB
+          ELSEIF choice$ = "G" THEN
+            GotoCustomAddress()
+            EXIT SUB
+          ELSEIF choice$ = "^" THEN
+            currentHost$ = DEFAULT_HOST$
+            currentSelector$ = "/"
+            currentPort = DEFAULT_PORT
+            GopherConnect(currentHost$, currentPort)
+          ENDIF
+        ENDIF
+      ELSEIF choice$ = "B" THEN
+        NavigateBack()
+        EXIT SUB
+      ELSEIF choice$ = "G" THEN
+        GotoCustomAddress()
+        EXIT SUB
+      ELSE
+        ' Home
+        currentHost$ = DEFAULT_HOST$
+        currentSelector$ = "/"
+        currentPort = DEFAULT_PORT
+        GopherConnect(currentHost$, currentPort)
+      ENDIF
+    ELSE
+      EXIT DO
+    ENDIF
+  LOOP
 
   ' Read and parse menu lines from TCP response
   LOCAL line$, itemType$, display$, selector$, host$
   LOCAL port, i
 
-  ' Read lines until we get the terminator "." or no more data
   DO
     ReadGopherLine(line$)
 
@@ -821,6 +1107,16 @@ SUB FetchAndDisplayMenu()
   LOOP
 
   GopherClose()
+
+  ' Track this page in recently visited list
+  LOCAL pageTitle$
+  IF menuCount > 0 THEN
+    pageTitle$ = currentHost$ + currentSelector$
+  ELSE
+    pageTitle$ = currentHost$
+  ENDIF
+  PushRecent(pageTitle$, currentHost$, currentSelector$, currentPort)
+
   menuDirty = 1  ' Mark menu for redraw
 END SUB
 
@@ -880,18 +1176,65 @@ END SUB
 ' PHASE 6: SEARCH SUPPORT
 ' ================================================
 
+SUB PushSearchHistory(query$, host$, port)
+  ' Add a search query to the search history ring buffer.
+  ' Shifts oldest entry out if full. Same pattern as PushHistory.
+
+  LOCAL i
+
+  IF searchHistCount >= MAX_SEARCH_HIST THEN
+    ' Shift all entries down by one, dropping the oldest (index 0)
+    FOR i = 0 TO MAX_SEARCH_HIST - 2
+      searchHistQuery$(i) = searchHistQuery$(i + 1)
+      searchHistHost$(i) = searchHistHost$(i + 1)
+      searchHistPort(i) = searchHistPort(i + 1)
+    NEXT i
+    searchHistCount = MAX_SEARCH_HIST - 1
+  ENDIF
+
+  searchHistQuery$(searchHistCount) = LEFT$(query$, 128)
+  searchHistHost$(searchHistCount) = LEFT$(host$, 64)
+  searchHistPort(searchHistCount) = port
+  searchHistCount = searchHistCount + 1
+END SUB
+
 SUB SearchGopher(selector$, host$, port)
-  ' Handle Gopher search (type 7)
+  ' Handle Gopher search (type 7) with search history recall
+
+  LOCAL query$, i, y
 
   CLS
-  PRINT @(10, 50) "Enter search query:"
+  PRINT @(10, 30) "Enter search query:"
 
-  LOCAL query$
+  ' Show recent search history if available
+  IF searchHistCount > 0 THEN
+    PRINT @(10, 50) "Recent searches:"
+    FOR i = 0 TO searchHistCount - 1
+      y = 65 + i * LINE_HEIGHT
+      PRINT @(10, y) STR$(i + 1) + ") " + LEFT$(searchHistQuery$(i), 34)
+    NEXT i
+    PRINT @(10, y + 20) "Type number to reuse, or new query:"
+  ENDIF
+
   LINE INPUT query$
 
   IF query$ = "" THEN
     EXIT SUB
   ENDIF
+
+  ' Check if user typed a number to recall a search
+  IF LEN(query$) = 1 THEN
+    LOCAL idx
+    idx = VAL(query$) - 1
+    IF idx >= 0 THEN
+      IF idx < searchHistCount THEN
+        query$ = searchHistQuery$(idx)
+      ENDIF
+    ENDIF
+  ENDIF
+
+  ' Save to search history
+  PushSearchHistory(query$, host$, port)
 
   ' Build search request: selector + TAB + query
   LOCAL searchSelector$ = selector$ + TAB$ + query$

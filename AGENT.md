@@ -52,38 +52,47 @@ See **QUICK_START.md** for bookmark setup.
 
 The single `gopher.bas` file is organized into logical phases (approximate line ranges):
 
-**Phase 1: Network & Protocol (Lines ~84-260)**
+**Phase 1: Network & Protocol**
 - `InitWiFi()` - WiFi connection check (credentials via `OPTION WIFI`)
-- `GopherConnect(host$, port)` - Open TCP client connection
-- `GopherSend(selector$)` - Send Gopher request (selector + CRLF)
+- `GopherConnect(host$, port)` - Open TCP client connection (sets `tcpConnected`, `lastError$`)
+- `GopherSend(selector$)` - Send Gopher request (sets `lastError$` on failure)
 - `ReadGopherLine(result$)` - Read one line from TCP response buffer (CHR$(0) sentinel for end-of-data)
 - `GopherClose()` - Close connection
+- `ShowError$(title$, detail$)` - Interactive error screen with retry/back/home options
 - `ParseMenuLine()` - Parse RFC 1436 menu line format
 
-**Phase 2: Display & Navigation (Lines ~262-495)**
+**Phase 2: Display & Navigation**
 - `DisplayMenu()` - Render menu to LCD with type indicators, highlights, and horizontal scroll offset
 - `DisplayTextPage()` - Render word-wrapped text page to LCD
-- `HandleInput()` - Process keyboard input (Up/Down skip info items, Left/Right horizontal scroll, Enter, B, A, ESC, G, Q)
+- `HandleInput()` - Process keyboard input (Up/Down, Left/Right, Enter, B, A, ESC, G, R, ?, Q)
 - `PushHistory()` - Save current state to history stack (shifts on overflow)
 - `NavigateBack()` - Restore previous menu from history
 
-**Phase 3: Text Viewer (Lines ~515-650)**
+**Phase 3: Text Viewer**
 - `WrapAndStoreLine(line$)` - Word-wrap a line and store segments into textLines$() array
-- `ViewTextFile(host$, selector$, port)` - Fetch and display text file with word wrapping and scrolling
+- `ViewTextFile(host$, selector$, port)` - Fetch and display text file with word wrapping, scrolling, and error recovery
 
-**Phase 4: Bookmarks (Lines ~582-685)**
+**Phase 4: Bookmarks**
 - `SaveBookmark()` - Save current location to `bookmarks.txt`
 - `ShowBookmarks()` - Load and display bookmark list
 
-**Phase 5: Menu Fetcher (Lines ~687-790)**
-- `FetchAndDisplayMenu()` - Connect, send request, parse, display all at once
+**Phase 4B: Recently Visited**
+- `PushRecent(disp$, host$, selector$, port)` - Add page to recently visited ring buffer
+- `ShowRecent()` - Display selectable list of recently visited pages
+
+**Phase 4C: Help**
+- `ShowHelp()` - Full-screen help overlay with all key bindings
+
+**Phase 5: Menu Fetcher**
+- `FetchAndDisplayMenu()` - Connect, send, parse, display with retry/back/home error recovery
 - `NavigateToItem(index)` - Handle selection of menu item (dispatch to viewer/menu/search)
 
-**Phase 6: Search & Address Bar (Lines ~792-870)**
-- `SearchGopher()` - Type 7 (search) handler, prompt for query
+**Phase 6: Search & Address Bar**
+- `PushSearchHistory(query$, host$, port)` - Add query to search history ring buffer
+- `SearchGopher()` - Type 7 (search) handler with search history recall
 - `GotoCustomAddress()` - Navigate to user-entered gopher address
 
-**Main Program (Lines ~872-943)**
+**Main Program**
 - `Main()` - Initialize WiFi, fetch default menu, enter main loop
 - `FILE_EXISTS()` - Helper to check file existence
 
@@ -93,20 +102,23 @@ The single `gopher.bas` file is organized into logical phases (approximate line 
 Main()
   ├─> InitWiFi()
   ├─> FetchAndDisplayMenu()
-  │    ├─> GopherConnect()
-  │    ├─> GopherSend()
+  │    ├─> GopherConnect() ──> ShowError$() on failure
+  │    ├─> GopherSend()    ──> ShowError$() on failure
   │    ├─> ReadGopherLine()
   │    ├─> ParseMenuLine()
-  │    └─> GopherClose()
+  │    ├─> GopherClose()
+  │    └─> PushRecent()
   ├─> DisplayMenu()
   ├─> HandleInput()
   │    ├─> NavigateToItem()
-  │    │    ├─> ViewTextFile() (Type 0)
+  │    │    ├─> ViewTextFile() (Type 0) ──> PushRecent()
   │    │    ├─> FetchAndDisplayMenu() (Type 1)
-  │    │    └─> SearchGopher() (Type 7)
+  │    │    └─> SearchGopher() (Type 7) ──> PushSearchHistory()
   │    ├─> NavigateBack()
   │    ├─> SaveBookmark()
   │    ├─> ShowBookmarks()
+  │    ├─> ShowRecent()
+  │    ├─> ShowHelp()
   │    └─> GotoCustomAddress()
   └─> [Loop: status timeout check + DisplayMenu + HandleInput]
 ```
@@ -128,10 +140,12 @@ MAX_MENU_ITEMS = 80         ' Items in single menu
 MAX_TEXT_LINES = 400        ' Lines in text file (word-wrapped)
 MAX_HISTORY = 10            ' Back button depth (shifts on overflow)
 MAX_BOOKMARKS = 30          ' Bookmarks in list
+MAX_SEARCH_HIST = 5         ' Search history entries
+MAX_RECENT = 10             ' Recently visited pages
 TCP_TIMEOUT = 10000         ' Connection timeout (ms)
 ```
 
-All string arrays use `DIM array$(n) LENGTH m` to allocate only the needed bytes per element (total ~49KB heap).
+All string arrays use `DIM array$(n) LENGTH m` to allocate only the needed bytes per element (total ~52KB heap).
 
 ### mmBASIC Quirks & Constraints
 
@@ -258,7 +272,7 @@ Terminated by period (`.`) on its own line.
 ## Known Limitations
 
 1. **String Length**: mmBASIC 255-char limit (mitigated by LONGSTRING buffer); arrays use `LENGTH` to save heap
-2. **Memory**: ~49KB heap; limited to 80 menu items, 400 text lines (word-wrapped), 30 bookmarks
+2. **Memory**: ~52KB heap; limited to 80 menu items, 400 text lines (word-wrapped), 30 bookmarks, 5 search history, 10 recent pages
 3. **Media Types**: No image/binary file support
 4. **Display**: Monochrome text only with type indicators (no colors)
 5. **Network**: Single concurrent connection, basic error handling
@@ -313,10 +327,14 @@ Terminated by period (`.`) on its own line.
 | Navigate Items | `NavigateToItem()` | Type dispatch |
 | View Text | `ViewTextFile()` | `DisplayTextPage()` |
 | Bookmarks | `SaveBookmark()`, `ShowBookmarks()` | File I/O via OPEN/PRINT |
+| Recent Pages | `ShowRecent()` | `PushRecent()` ring buffer |
+| Search History | `SearchGopher()` | `PushSearchHistory()` ring buffer |
+| Error Recovery | `ShowError$()` | Interactive retry/back/home |
+| Help | `ShowHelp()` | Key binding overlay |
 | Go Back | `NavigateBack()` | History stack |
 
 ---
 
 **Last Updated**: February 11, 2026
-**Version**: 1.0
+**Version**: 1.1
 **Maintained By**: Development Team

@@ -9,6 +9,10 @@ A lightweight Gopher protocol browser for the Raspberry Pi Pico 2W running PicoM
 - **Text Viewer**: Word-wrapped text with page up/down scrolling
 - **Bookmark Management**: Save, load, and manage bookmarks (press 'A' to add, ESC to view)
 - **History Stack**: Back button to return to previous menus
+- **Recently Visited**: Viewable list of recently visited pages (press 'R')
+- **Search History**: Recall previous search queries when using Gopher search
+- **Error Recovery**: Interactive retry/back/home options on connection failures
+- **Help Menu**: Press '?' for a full list of key bindings
 - **Simple Display**: Works with graphics LCD displays (~320x320 pixels)
 - **WiFi Connectivity**: Browse public Gopher servers over WiFi
 
@@ -67,6 +71,9 @@ RUN "gopher.bas"
 | **B** | Back to previous menu |
 | **A** | Add current item as bookmark |
 | **ESC** | View bookmarks |
+| **R** | Recently visited pages |
+| **G** | Go to custom Gopher address |
+| **?** | Help menu (all key bindings) |
 | **Q** | Quit program |
 
 ### Text Viewer Controls
