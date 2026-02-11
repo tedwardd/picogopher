@@ -1,0 +1,8 @@
+# PicoGopher Bookmarks
+# Format: display[TAB]selector[TAB]host[TAB]port
+# Add bookmarks using the 'A' key when viewing menu items
+#
+# Example bookmarks (uncomment to use):
+# Floodgap Systems	/	gopher.floodgap.com	70
+# SDF Public Access	/	sdf.org	70
+# Quux.org	/	gopher.quux.org	70
