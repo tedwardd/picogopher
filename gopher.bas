@@ -15,7 +15,7 @@
 ' CONFIGURATION & CONSTANTS
 ' ================================================
 
-CONST VERSION$ = "1.2"
+CONST VERSION$ = "1.3"
 CONST DEFAULT_HOST$ = "gopher.floodgap.com"
 CONST DEFAULT_PORT = 70
 
