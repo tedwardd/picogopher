@@ -159,12 +159,14 @@ CONST LINES_PER_PAGE = 25      ' Menu items per page
 
 ```basic
 CONST MAX_MENU_ITEMS = 80      ' Max items in single menu
-CONST MAX_TEXT_LINES = 200     ' Max lines in text file
+CONST MAX_TEXT_LINES = 400     ' Max lines in text file (word-wrapped)
 CONST MAX_HISTORY = 10         ' Max back history depth
 CONST MAX_BOOKMARKS = 30      ' Max bookmarks
+CONST MAX_SEARCH_HIST = 5     ' Search history entries
+CONST MAX_RECENT = 10         ' Recently visited pages
 ```
 
-All string arrays use `LENGTH` to minimize heap usage (~45 KB total).
+All string arrays use `LENGTH` to minimize heap usage (~52 KB total).
 Adjust based on available PicoMite RAM (~100-160 KB heap on Pico 2W).
 
 ### TCP Settings
@@ -181,30 +183,40 @@ The program is organized into functional modules:
 Main Program (gopher.bas)
 ├── Phase 1: Network & Protocol
 │   ├── InitWiFi()              - WiFi connection check
-│   ├── GopherConnect/Send/Close - TCP client
+│   ├── GopherConnect/Send/Close - TCP client (sets lastError$)
 │   ├── ReadGopherLine()        - Buffered line reader
+│   ├── ShowError$()            - Interactive error recovery
 │   └── ParseMenuLine()         - Menu parsing
 │
 ├── Phase 2: Display & Navigation
-│   ├── DisplayMenu()           - Menu rendering with type indicators
-│   ├── DisplayTextPage()       - Text page rendering
-│   ├── HandleInput()           - Keyboard input (skips info items)
+│   ├── DisplayMenu()           - Menu rendering with horizontal scroll
+│   ├── DisplayTextPage()       - Word-wrapped text rendering
+│   ├── HandleInput()           - Keyboard input
 │   ├── PushHistory()           - Navigation history (shifts on overflow)
 │   └── NavigateBack()          - Back functionality
 │
 ├── Phase 3: Text Viewer
-│   └── ViewTextFile()          - Fetch & display text with scrolling
+│   ├── WrapAndStoreLine()      - Word-wrap lines at load time
+│   └── ViewTextFile()          - Fetch & display with error recovery
 │
 ├── Phase 4: Bookmarks
 │   ├── SaveBookmark()          - Add bookmark
 │   └── ShowBookmarks()         - Bookmark list
 │
+├── Phase 4B: Recently Visited
+│   ├── PushRecent()            - Track visited pages
+│   └── ShowRecent()            - Recently visited list
+│
+├── Phase 4C: Help
+│   └── ShowHelp()              - Key binding overlay
+│
 ├── Phase 5: Main Logic
-│   ├── FetchAndDisplayMenu()   - Menu fetcher (with connection guard)
+│   ├── FetchAndDisplayMenu()   - Menu fetcher with retry/back/home/go
 │   └── NavigateToItem()        - Item navigation
 │
 └── Phase 6: Search & Address Bar
-    ├── SearchGopher()          - Type 7 search
+    ├── PushSearchHistory()     - Track search queries
+    ├── SearchGopher()          - Type 7 search with history recall
     └── GotoCustomAddress()     - Manual address entry
 ```
 
@@ -213,10 +225,10 @@ Main Program (gopher.bas)
 ### Current Limitations
 
 1. **String Length**: mmBASIC 255-char limit; arrays use `LENGTH` to save heap
-2. **Memory**: ~45 KB heap usage; 80 menu items, 200 text lines, 30 bookmarks
+2. **Memory**: ~52 KB heap usage; 80 menu items, 400 text lines, 30 bookmarks, 5 search history, 10 recent pages
 3. **Media Types**: No image/binary file support yet
 4. **Display**: Monochrome text only (color support possible with LCD driver)
-5. **Network**: Single concurrent connection, basic error handling
+5. **Network**: Single concurrent connection with interactive error recovery
 
 ### mmBASIC Constraints
 
@@ -236,7 +248,7 @@ Add this to `Main()` after initialization:
 ```basic
 PRINT "=== PicoGopher Debug ==="
 PRINT "Host: " + currentHost$
-PRINT "Port: " + IntToStr$(currentPort)
+PRINT "Port: " + STR$(currentPort)
 PRINT "Selector: " + currentSelector$
 ```
 
@@ -329,7 +341,7 @@ For issues or questions:
 
 ---
 
-**Version**: 1.0
-**Last Updated**: February 10, 2025
+**Version**: 1.1
+**Last Updated**: February 11, 2026
 **Author**: Claude
 **Platform**: PicoMite on Raspberry Pi Pico 2W

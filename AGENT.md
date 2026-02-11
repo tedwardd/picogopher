@@ -275,7 +275,7 @@ Terminated by period (`.`) on its own line.
 2. **Memory**: ~52KB heap; limited to 80 menu items, 400 text lines (word-wrapped), 30 bookmarks, 5 search history, 10 recent pages
 3. **Media Types**: No image/binary file support
 4. **Display**: Monochrome text only with type indicators (no colors)
-5. **Network**: Single concurrent connection, basic error handling
+5. **Network**: Single concurrent connection with interactive error recovery (retry/back/home/go)
 
 ## Key Documentation
 

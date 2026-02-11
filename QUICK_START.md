@@ -35,7 +35,7 @@ In PicoMite BASIC:
 RUN "gopher.bas"
 ```
 
-That's it! You should see "PicoGopher v1.0" and start connecting to the default Gopher server.
+That's it! You should see "PicoGopher v1.1" and start connecting to the default Gopher server.
 
 ---
 
@@ -45,12 +45,15 @@ That's it! You should see "PicoGopher v1.0" and start connecting to the default 
 
 | Key | What It Does |
 |-----|--------------|
-| **↑** | Move up in menu |
-| **↓** | Move down in menu |
+| **↑/↓** | Move up/down in menu |
+| **←/→** | Horizontal scroll (long lines) |
 | **Enter** | Select highlighted item |
 | **B** | Go back to previous menu |
 | **A** | Save current item as bookmark |
 | **ESC** | View your bookmarks |
+| **R** | Recently visited pages |
+| **G** | Go to a specific address |
+| **?** | Help (all key bindings) |
 | **Q** | Quit program |
 
 ### In Text Viewer
@@ -151,15 +154,17 @@ Then press ESC to view and select them!
 
 ## What You Can Do
 
-✅ Browse Gopher menu hierarchies
-✅ View text files with scrolling
-✅ Navigate between servers
-✅ Save and use bookmarks
-✅ Go back to previous locations
-✅ Search Gopher servers (type 7)
+- Browse Gopher menu hierarchies
+- View word-wrapped text files with scrolling
+- Horizontal scroll on long menu lines
+- Navigate between servers
+- Save and use bookmarks
+- Go back to previous locations
+- Search Gopher servers (type 7) with search history
+- View recently visited pages
+- Interactive error recovery (retry/back/home/go)
 
-❌ Not yet: Download files
-❌ Not yet: View images
+**Not yet supported:** Download files, view images
 
 ---
 
@@ -240,23 +245,27 @@ Once you're comfortable with basics:
 ```
 Navigation
 ──────────
-↑         Up one item
-↓         Down one item
+↑/↓       Navigate menu items
+←/→       Horizontal scroll
 Enter     Select item
+B         Go back
+^         Go to home server
 
-Menu Navigation
-───────────────
-B         Back to previous menu
-Q         Quit program
-
-Bookmarks
-─────────
+Features
+────────
+G         Go to address
 A         Add bookmark
 ESC       View bookmarks
+R         Recently visited
+
+Other
+─────
+Q         Quit
+?         Help screen
 
 Text Viewer
 ───────────
-↑↓        Scroll line by line
+↑/↓       Scroll line by line
 PgUp/PgDn Jump full page
 Q         Exit viewer
 ```
@@ -275,7 +284,7 @@ A: Up to 30 bookmarks in the bookmark system.
 A: Press A to add new ones. To remove, edit `bookmarks.txt` in a text editor.
 
 **Q: What happens if a server is down?**
-A: You'll get an error message. Try another server!
+A: You'll get an error screen with options to Retry, go Back, go Home, or Go to a different address.
 
 **Q: Can I search Gopher servers?**
 A: Some servers support search (type 7). Select them and enter a search query.
@@ -299,5 +308,5 @@ Remember: Gopher is a simple, elegant protocol for sharing information. Enjoy th
 
 ---
 
-**Version**: 1.0
-**Last Updated**: February 10, 2025
+**Version**: 1.1
+**Last Updated**: February 11, 2026
