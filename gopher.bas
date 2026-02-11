@@ -22,9 +22,9 @@ CONST DEFAULT_PORT = 70
 ' Display settings (adjust for your LCD)
 CONST SCREEN_WIDTH = 320
 CONST SCREEN_HEIGHT = 320
-CONST LINE_HEIGHT = 10
+CONST LINE_HEIGHT = 12
 CONST CHARS_PER_LINE = 40
-CONST LINES_PER_PAGE = 25
+CONST LINES_PER_PAGE = 21
 
 ' Memory limits (tuned for Pico 2W ~100-160KB heap)
 ' mmBASIC allocates 256 bytes per string element by default.
@@ -361,37 +361,41 @@ SUB DisplayMenu()
     i = pageStart + slot
 
     IF i <= pageEnd THEN
-      ' Add type indicator prefix
-      SELECT CASE menuType$(i)
-        CASE "0"
-          typePrefix$ = "[TXT] "
-        CASE "1"
-          typePrefix$ = "[DIR] "
-        CASE "7"
-          typePrefix$ = "[?]   "
-        CASE "3"
-          typePrefix$ = "[ERR] "
-        CASE "i"
-          typePrefix$ = "      "
-        CASE ELSE
-          typePrefix$ = "[" + menuType$(i) + "]   "
-      END SELECT
-
-      ' Build full content string, then apply horizontal scroll offset
-      fullStr$ = typePrefix$ + menuDisp$(i)
-      IF menuScrollX < LEN(fullStr$) THEN
-        displayStr$ = MID$(fullStr$, menuScrollX + 1, visibleChars)
-      ELSE
-        displayStr$ = ""
-      ENDIF
-
-      ' Build cursor prefix + content, padded to full line width
       IF menuType$(i) = "i" THEN
-        lineOut$ = "  " + displayStr$
-      ELSEIF i = selectedIndex THEN
-        lineOut$ = "> " + displayStr$
+        ' Info items: no prefix, use full line width for ASCII art/text
+        IF menuScrollX < LEN(menuDisp$(i)) THEN
+          lineOut$ = MID$(menuDisp$(i), menuScrollX + 1, CHARS_PER_LINE)
+        ELSE
+          lineOut$ = ""
+        ENDIF
       ELSE
-        lineOut$ = "  " + displayStr$
+        ' Selectable items: type indicator prefix + cursor
+        SELECT CASE menuType$(i)
+          CASE "0"
+            typePrefix$ = "[TXT] "
+          CASE "1"
+            typePrefix$ = "[DIR] "
+          CASE "7"
+            typePrefix$ = "[?]   "
+          CASE "3"
+            typePrefix$ = "[ERR] "
+          CASE ELSE
+            typePrefix$ = "[" + menuType$(i) + "]   "
+        END SELECT
+
+        ' Build full content string, then apply horizontal scroll offset
+        fullStr$ = typePrefix$ + menuDisp$(i)
+        IF menuScrollX < LEN(fullStr$) THEN
+          displayStr$ = MID$(fullStr$, menuScrollX + 1, visibleChars)
+        ELSE
+          displayStr$ = ""
+        ENDIF
+
+        IF i = selectedIndex THEN
+          lineOut$ = "> " + displayStr$
+        ELSE
+          lineOut$ = "  " + displayStr$
+        ENDIF
       ENDIF
 
       ' Pad to full width and print (overwrites previous content)
