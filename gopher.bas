@@ -112,6 +112,10 @@ DIM recentSel$(MAX_RECENT) LENGTH 128     ' 10 x 129 =  1,290 bytes
 DIM recentPort(MAX_RECENT)                ' 10 x   8 =     80 bytes
 DIM recentCount AS INTEGER
 
+' Display optimization: pre-built blank line for padding (avoids CLS flicker)
+DIM blankLine$ LENGTH 42
+blankLine$ = SPACE$(42)
+
 ' ================================================
 ' PHASE 1: NETWORK & PROTOCOL
 ' ================================================
@@ -331,17 +335,10 @@ END SUB
 
 SUB DisplayMenu()
   ' Display current menu page (only if dirty flag is set)
+  ' Uses in-place overwriting with padded lines to avoid CLS flicker
 
   IF menuDirty = 0 THEN EXIT SUB
   menuDirty = 0
-
-  ' Reset cursor to top before clearing to prevent scroll
-  PRINT @(0, 0) "";
-  CLS
-
-  ' Title bar
-  PRINT @(0, 10) "PicoGopher - " + currentHost$;
-  PRINT @(0, 22) STRING$(40, "-");
 
   ' Calculate page range
   pageStart = MAX(0, selectedIndex - LINES_PER_PAGE / 2)
@@ -351,48 +348,61 @@ SUB DisplayMenu()
     pageStart = MAX(0, pageEnd - LINES_PER_PAGE + 1)
   ENDIF
 
+  ' Title bar (padded to full width to overwrite old content)
+  PRINT @(0, 10) LEFT$("PicoGopher - " + currentHost$ + SPACE$(40), 40);
+  PRINT @(0, 22) STRING$(40, "-");
+
   ' Display menu items (with horizontal scroll support)
-  LOCAL i, y, displayStr$, typePrefix$, fullStr$, visibleChars
+  LOCAL i, y, slot, displayStr$, typePrefix$, fullStr$, lineOut$, visibleChars
   visibleChars = CHARS_PER_LINE - 2  ' Reserve 2 chars for cursor prefix
 
-  FOR i = pageStart TO pageEnd
-    y = (i - pageStart) * LINE_HEIGHT + 34
+  FOR slot = 0 TO LINES_PER_PAGE - 1
+    y = slot * LINE_HEIGHT + 34
+    i = pageStart + slot
 
-    ' Add type indicator prefix
-    SELECT CASE menuType$(i)
-      CASE "0"
-        typePrefix$ = "[TXT] "
-      CASE "1"
-        typePrefix$ = "[DIR] "
-      CASE "7"
-        typePrefix$ = "[?]   "
-      CASE "3"
-        typePrefix$ = "[ERR] "
-      CASE "i"
-        typePrefix$ = "      "
-      CASE ELSE
-        typePrefix$ = "[" + menuType$(i) + "]   "
-    END SELECT
+    IF i <= pageEnd THEN
+      ' Add type indicator prefix
+      SELECT CASE menuType$(i)
+        CASE "0"
+          typePrefix$ = "[TXT] "
+        CASE "1"
+          typePrefix$ = "[DIR] "
+        CASE "7"
+          typePrefix$ = "[?]   "
+        CASE "3"
+          typePrefix$ = "[ERR] "
+        CASE "i"
+          typePrefix$ = "      "
+        CASE ELSE
+          typePrefix$ = "[" + menuType$(i) + "]   "
+      END SELECT
 
-    ' Build full content string, then apply horizontal scroll offset
-    fullStr$ = typePrefix$ + menuDisp$(i)
-    IF menuScrollX < LEN(fullStr$) THEN
-      displayStr$ = MID$(fullStr$, menuScrollX + 1, visibleChars)
+      ' Build full content string, then apply horizontal scroll offset
+      fullStr$ = typePrefix$ + menuDisp$(i)
+      IF menuScrollX < LEN(fullStr$) THEN
+        displayStr$ = MID$(fullStr$, menuScrollX + 1, visibleChars)
+      ELSE
+        displayStr$ = ""
+      ENDIF
+
+      ' Build cursor prefix + content, padded to full line width
+      IF menuType$(i) = "i" THEN
+        lineOut$ = "  " + displayStr$
+      ELSEIF i = selectedIndex THEN
+        lineOut$ = "> " + displayStr$
+      ELSE
+        lineOut$ = "  " + displayStr$
+      ENDIF
+
+      ' Pad to full width and print (overwrites previous content)
+      PRINT @(0, y) LEFT$(lineOut$ + blankLine$, CHARS_PER_LINE);
     ELSE
-      displayStr$ = ""
+      ' Blank unused line slots (overwrite leftover content from previous page)
+      PRINT @(0, y) LEFT$(blankLine$, CHARS_PER_LINE);
     ENDIF
+  NEXT slot
 
-    ' Highlight selected item (skip cursor for info items)
-    IF menuType$(i) = "i" THEN
-      PRINT @(0, y) "  " + displayStr$;
-    ELSEIF i = selectedIndex THEN
-      PRINT @(0, y) "> " + displayStr$;
-    ELSE
-      PRINT @(0, y) "  " + displayStr$;
-    ENDIF
-  NEXT i
-
-  ' Status bar
+  ' Status bar (padded to overwrite old content)
   LOCAL statusText$ = ""
   IF LEN(statusMsg$) > 0 THEN
     statusText$ = statusMsg$
@@ -400,34 +410,127 @@ SUB DisplayMenu()
     statusText$ = "^=Home B=Back G=Go Q=Quit ?=Help"
   ENDIF
 
-  PRINT @(0, SCREEN_HEIGHT - 28) statusText$;
+  PRINT @(0, SCREEN_HEIGHT - 28) LEFT$(statusText$ + blankLine$, CHARS_PER_LINE);
 
-  ' Show item count
-  PRINT @(0, SCREEN_HEIGHT - 14) "Item " + STR$(selectedIndex + 1) + "/" + STR$(menuCount);
+  ' Show item count (padded)
+  LOCAL countStr$
+  countStr$ = "Item " + STR$(selectedIndex + 1) + "/" + STR$(menuCount)
+  PRINT @(0, SCREEN_HEIGHT - 14) LEFT$(countStr$ + blankLine$, CHARS_PER_LINE);
+END SUB
+
+SUB UpdateMenuCursor(oldIdx, newIdx)
+  ' Lightweight 2-line update: repaint only the old and new selected lines.
+  ' Used when the cursor moves within the already-visible page range,
+  ' avoiding a full DisplayMenu() redraw for smoother scrolling.
+
+  LOCAL y, displayStr$, typePrefix$, fullStr$, lineOut$, visibleChars
+  visibleChars = CHARS_PER_LINE - 2
+
+  ' --- Repaint old selection (remove cursor) ---
+  IF oldIdx >= pageStart THEN
+    IF oldIdx <= pageEnd THEN
+      y = (oldIdx - pageStart) * LINE_HEIGHT + 34
+
+      SELECT CASE menuType$(oldIdx)
+        CASE "0"
+          typePrefix$ = "[TXT] "
+        CASE "1"
+          typePrefix$ = "[DIR] "
+        CASE "7"
+          typePrefix$ = "[?]   "
+        CASE "3"
+          typePrefix$ = "[ERR] "
+        CASE "i"
+          typePrefix$ = "      "
+        CASE ELSE
+          typePrefix$ = "[" + menuType$(oldIdx) + "]   "
+      END SELECT
+
+      fullStr$ = typePrefix$ + menuDisp$(oldIdx)
+      IF menuScrollX < LEN(fullStr$) THEN
+        displayStr$ = MID$(fullStr$, menuScrollX + 1, visibleChars)
+      ELSE
+        displayStr$ = ""
+      ENDIF
+
+      lineOut$ = "  " + displayStr$
+      PRINT @(0, y) LEFT$(lineOut$ + blankLine$, CHARS_PER_LINE);
+    ENDIF
+  ENDIF
+
+  ' --- Repaint new selection (add cursor) ---
+  IF newIdx >= pageStart THEN
+    IF newIdx <= pageEnd THEN
+      y = (newIdx - pageStart) * LINE_HEIGHT + 34
+
+      SELECT CASE menuType$(newIdx)
+        CASE "0"
+          typePrefix$ = "[TXT] "
+        CASE "1"
+          typePrefix$ = "[DIR] "
+        CASE "7"
+          typePrefix$ = "[?]   "
+        CASE "3"
+          typePrefix$ = "[ERR] "
+        CASE "i"
+          typePrefix$ = "      "
+        CASE ELSE
+          typePrefix$ = "[" + menuType$(newIdx) + "]   "
+      END SELECT
+
+      fullStr$ = typePrefix$ + menuDisp$(newIdx)
+      IF menuScrollX < LEN(fullStr$) THEN
+        displayStr$ = MID$(fullStr$, menuScrollX + 1, visibleChars)
+      ELSE
+        displayStr$ = ""
+      ENDIF
+
+      IF menuType$(newIdx) = "i" THEN
+        lineOut$ = "  " + displayStr$
+      ELSE
+        lineOut$ = "> " + displayStr$
+      ENDIF
+
+      PRINT @(0, y) LEFT$(lineOut$ + blankLine$, CHARS_PER_LINE);
+    ENDIF
+  ENDIF
+
+  ' Update item count footer
+  LOCAL countStr$
+  countStr$ = "Item " + STR$(newIdx + 1) + "/" + STR$(menuCount)
+  PRINT @(0, SCREEN_HEIGHT - 14) LEFT$(countStr$ + blankLine$, CHARS_PER_LINE);
 END SUB
 
 SUB DisplayTextPage(scrollPos)
   ' Display text file page (only if dirty flag is set)
+  ' Uses in-place overwriting with padded lines to avoid CLS flicker
 
   IF textDirty = 0 THEN EXIT SUB
   textDirty = 0
 
-  CLS
-  PRINT @(0, 10) "Text Viewer - ^v to scroll, Q to exit";
+  ' Title bar (padded to overwrite old content)
+  PRINT @(0, 10) LEFT$("Text Viewer - ^v to scroll, Q to exit" + SPACE$(40), 40);
   PRINT @(0, 22) STRING$(40, "-");
 
-  LOCAL i, lineNum, y, displayLine$
+  LOCAL i, lineNum, y, lineStr$
   FOR i = 0 TO LINES_PER_PAGE - 1
+    y = i * LINE_HEIGHT + 34
     lineNum = scrollPos + i
-    IF lineNum < textLineCount THEN
-      y = i * LINE_HEIGHT + 34
 
+    IF lineNum < textLineCount THEN
       ' Lines are already word-wrapped at load time to fit CHARS_PER_LINE
-      PRINT @(0, y) textLines$(lineNum);
+      ' Pad to full width to overwrite previous content
+      PRINT @(0, y) LEFT$(textLines$(lineNum) + blankLine$, CHARS_PER_LINE);
+    ELSE
+      ' Blank unused line slots
+      PRINT @(0, y) LEFT$(blankLine$, CHARS_PER_LINE);
     ENDIF
   NEXT i
 
-  PRINT @(0, SCREEN_HEIGHT - 14) "Line " + STR$(scrollPos + 1) + "/" + STR$(textLineCount);
+  ' Line count footer (padded)
+  LOCAL countStr$
+  countStr$ = "Line " + STR$(scrollPos + 1) + "/" + STR$(textLineCount)
+  PRINT @(0, SCREEN_HEIGHT - 14) LEFT$(countStr$ + blankLine$, CHARS_PER_LINE);
 END SUB
 
 SUB HandleInput()
@@ -450,7 +553,8 @@ SUB HandleInput()
 
     ' Arrow keys for navigation (skip non-selectable info items)
     CASE CHR$(128)  ' Up arrow
-      LOCAL newIdx
+      LOCAL newIdx, oldIdx
+      oldIdx = selectedIndex
       newIdx = selectedIndex - 1
       ' Note: mmBASIC does not short-circuit AND, so bounds check
       ' must be separate from array access to avoid Dimensions error
@@ -458,19 +562,50 @@ SUB HandleInput()
         IF menuType$(newIdx) <> "i" THEN EXIT DO
         newIdx = newIdx - 1
       LOOP
-      IF newIdx >= 0 THEN selectedIndex = newIdx
-      statusMsg$ = ""
-      menuDirty = 1
+      IF newIdx >= 0 THEN
+        ' If new index is within visible page, do fast 2-line update
+        IF newIdx >= pageStart THEN
+          IF newIdx <= pageEnd THEN
+            UpdateMenuCursor(oldIdx, newIdx)
+            selectedIndex = newIdx
+            statusMsg$ = ""
+          ELSE
+            selectedIndex = newIdx
+            statusMsg$ = ""
+            menuDirty = 1
+          ENDIF
+        ELSE
+          selectedIndex = newIdx
+          statusMsg$ = ""
+          menuDirty = 1
+        ENDIF
+      ENDIF
 
     CASE CHR$(129)  ' Down arrow
+      oldIdx = selectedIndex
       newIdx = selectedIndex + 1
       DO WHILE newIdx < menuCount
         IF menuType$(newIdx) <> "i" THEN EXIT DO
         newIdx = newIdx + 1
       LOOP
-      IF newIdx < menuCount THEN selectedIndex = newIdx
-      statusMsg$ = ""
-      menuDirty = 1
+      IF newIdx < menuCount THEN
+        ' If new index is within visible page, do fast 2-line update
+        IF newIdx >= pageStart THEN
+          IF newIdx <= pageEnd THEN
+            UpdateMenuCursor(oldIdx, newIdx)
+            selectedIndex = newIdx
+            statusMsg$ = ""
+          ELSE
+            selectedIndex = newIdx
+            statusMsg$ = ""
+            menuDirty = 1
+          ENDIF
+        ELSE
+          selectedIndex = newIdx
+          statusMsg$ = ""
+          menuDirty = 1
+        ENDIF
+      ENDIF
 
     ' Horizontal scroll for viewing long menu lines
     CASE CHR$(130)  ' Left arrow
@@ -789,6 +924,7 @@ SUB ShowBookmarks()
   LOCAL bmPort(MAX_BOOKMARKS)
   LOCAL bmCount, i, y, line$, t$, selected, selectingBookmark, key$
   LOCAL tmpDisp$, tmpSel$, tmpHost$, tmpPort
+  LOCAL lineOut$, slot, bmCountStr$
 
   CLS
   PRINT @(10, 100) "Loading bookmarks..."
@@ -830,21 +966,27 @@ SUB ShowBookmarks()
   DO WHILE selectingBookmark
     IF bookmarkDirty = 1 THEN
       bookmarkDirty = 0
-      CLS
-      PRINT @(0, 10) "Bookmarks - Enter=Select, ESC=Cancel";
+
+      PRINT @(0, 10) LEFT$("Bookmarks - Enter=Select, ESC=Cancel" + SPACE$(40), 40);
       PRINT @(0, 22) STRING$(40, "-");
 
-      FOR i = 0 TO bmCount - 1
-        y = i * LINE_HEIGHT + 34
+      FOR slot = 0 TO LINES_PER_PAGE - 1
+        y = slot * LINE_HEIGHT + 34
 
-        IF i = selected THEN
-          PRINT @(0, y) "> " + bmDisp$(i);
+        IF slot < bmCount THEN
+          IF slot = selected THEN
+            lineOut$ = "> " + bmDisp$(slot)
+          ELSE
+            lineOut$ = "  " + bmDisp$(slot)
+          ENDIF
+          PRINT @(0, y) LEFT$(lineOut$ + blankLine$, CHARS_PER_LINE);
         ELSE
-          PRINT @(0, y) "  " + bmDisp$(i);
+          PRINT @(0, y) LEFT$(blankLine$, CHARS_PER_LINE);
         ENDIF
-      NEXT i
+      NEXT slot
 
-      PRINT @(0, SCREEN_HEIGHT - 14) "Bookmark " + STR$(selected + 1) + "/" + STR$(bmCount);
+      bmCountStr$ = "Bookmark " + STR$(selected + 1) + "/" + STR$(bmCount)
+      PRINT @(0, SCREEN_HEIGHT - 14) LEFT$(bmCountStr$ + blankLine$, CHARS_PER_LINE);
     ENDIF
 
     key$ = INKEY$
@@ -906,6 +1048,7 @@ SUB ShowRecent()
   ' Similar UI to ShowBookmarks - Up/Down, Enter, ESC.
 
   LOCAL i, y, selected, selecting, key$, recentDirty
+  LOCAL lineOut$, slot, rcCountStr$
 
   IF recentCount = 0 THEN
     CLS
@@ -921,21 +1064,27 @@ SUB ShowRecent()
   DO WHILE selecting
     IF recentDirty = 1 THEN
       recentDirty = 0
-      CLS
-      PRINT @(0, 10) "Recent Pages - Enter=Go, ESC=Cancel";
+
+      PRINT @(0, 10) LEFT$("Recent Pages - Enter=Go, ESC=Cancel" + SPACE$(40), 40);
       PRINT @(0, 22) STRING$(40, "-");
 
-      FOR i = 0 TO recentCount - 1
-        y = i * LINE_HEIGHT + 34
+      FOR slot = 0 TO LINES_PER_PAGE - 1
+        y = slot * LINE_HEIGHT + 34
 
-        IF i = selected THEN
-          PRINT @(0, y) "> " + recentDisp$(i);
+        IF slot < recentCount THEN
+          IF slot = selected THEN
+            lineOut$ = "> " + recentDisp$(slot)
+          ELSE
+            lineOut$ = "  " + recentDisp$(slot)
+          ENDIF
+          PRINT @(0, y) LEFT$(lineOut$ + blankLine$, CHARS_PER_LINE);
         ELSE
-          PRINT @(0, y) "  " + recentDisp$(i);
+          PRINT @(0, y) LEFT$(blankLine$, CHARS_PER_LINE);
         ENDIF
-      NEXT i
+      NEXT slot
 
-      PRINT @(0, SCREEN_HEIGHT - 14) "Page " + STR$(selected + 1) + "/" + STR$(recentCount);
+      rcCountStr$ = "Page " + STR$(selected + 1) + "/" + STR$(recentCount)
+      PRINT @(0, SCREEN_HEIGHT - 14) LEFT$(rcCountStr$ + blankLine$, CHARS_PER_LINE);
     ENDIF
 
     key$ = INKEY$
