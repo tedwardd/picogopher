@@ -3,7 +3,7 @@
 ' A Gopher protocol browser for Raspberry Pi Pico with WiFi
 ' Version: 1.1
 ' Author: Claude
-' Last Modified: 2026-02-11
+' Last Modified: 2026-02-12
 '
 ' Dependencies:
 '   - PicoMite firmware with WebMite support
@@ -15,7 +15,7 @@
 ' CONFIGURATION & CONSTANTS
 ' ================================================
 
-CONST VERSION$ = "1.1"
+CONST VERSION$ = "1.2"
 CONST DEFAULT_HOST$ = "gopher.floodgap.com"
 CONST DEFAULT_PORT = 70
 

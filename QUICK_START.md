@@ -35,7 +35,7 @@ In PicoMite BASIC:
 RUN "gopher.bas"
 ```
 
-That's it! You should see "PicoGopher v1.1" and start connecting to the default Gopher server.
+That's it! You should see "PicoGopher v1.2" and start connecting to the default Gopher server.
 
 ---
 
@@ -308,5 +308,5 @@ Remember: Gopher is a simple, elegant protocol for sharing information. Enjoy th
 
 ---
 
-**Version**: 1.1
-**Last Updated**: February 11, 2026
+**Version**: 1.2
+**Last Updated**: February 12, 2026

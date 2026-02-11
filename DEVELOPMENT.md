@@ -623,7 +623,12 @@ Before releasing a new version:
 - [x] Search history feature
 - [x] Recently visited list
 
-### Medium Term (v1.2)
+### Short Term (v1.2) -- DONE
+- [x] Flicker-free scrolling (replace CLS with in-place overwriting)
+- [x] Differential cursor updates for Up/Down navigation
+- [x] Padded line rendering across all screens
+
+### Medium Term (v1.3)
 - [ ] Image file support (type g)
 - [ ] Binary file download to SD
 - [ ] Menu caching on SD card
@@ -636,5 +641,5 @@ Before releasing a new version:
 
 ---
 
-**Last Updated**: February 11, 2026
+**Last Updated**: February 12, 2026
 **Maintained By**: Development Team

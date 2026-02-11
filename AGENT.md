@@ -62,8 +62,9 @@ The single `gopher.bas` file is organized into logical phases (approximate line 
 - `ParseMenuLine()` - Parse RFC 1436 menu line format
 
 **Phase 2: Display & Navigation**
-- `DisplayMenu()` - Render menu to LCD with type indicators, highlights, and horizontal scroll offset
-- `DisplayTextPage()` - Render word-wrapped text page to LCD
+- `DisplayMenu()` - Flicker-free menu rendering with in-place line overwriting
+- `UpdateMenuCursor(oldIdx, newIdx)` - Fast 2-line differential cursor update (avoids full redraw)
+- `DisplayTextPage()` - Flicker-free word-wrapped text rendering
 - `HandleInput()` - Process keyboard input (Up/Down, Left/Right, Enter, B, A, ESC, G, R, ?, Q)
 - `PushHistory()` - Save current state to history stack (shifts on overflow)
 - `NavigateBack()` - Restore previous menu from history
@@ -335,6 +336,6 @@ Terminated by period (`.`) on its own line.
 
 ---
 
-**Last Updated**: February 11, 2026
-**Version**: 1.1
+**Last Updated**: February 12, 2026
+**Version**: 1.2
 **Maintained By**: Development Team

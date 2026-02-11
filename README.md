@@ -13,6 +13,7 @@ A lightweight Gopher protocol browser for the Raspberry Pi Pico 2W running PicoM
 - **Search History**: Recall previous search queries when using Gopher search
 - **Error Recovery**: Interactive retry/back/home options on connection failures
 - **Help Menu**: Press '?' for a full list of key bindings
+- **Flicker-Free Scrolling**: Optimized rendering with in-place line overwriting and differential cursor updates
 - **Simple Display**: Works with graphics LCD displays (~320x320 pixels)
 - **WiFi Connectivity**: Browse public Gopher servers over WiFi
 
@@ -189,8 +190,9 @@ Main Program (gopher.bas)
 │   └── ParseMenuLine()         - Menu parsing
 │
 ├── Phase 2: Display & Navigation
-│   ├── DisplayMenu()           - Menu rendering with horizontal scroll
-│   ├── DisplayTextPage()       - Word-wrapped text rendering
+│   ├── DisplayMenu()           - Flicker-free menu rendering
+│   ├── UpdateMenuCursor()      - Fast 2-line differential cursor update
+│   ├── DisplayTextPage()       - Flicker-free text rendering
 │   ├── HandleInput()           - Keyboard input
 │   ├── PushHistory()           - Navigation history (shifts on overflow)
 │   └── NavigateBack()          - Back functionality
@@ -277,8 +279,6 @@ PRINT "Selector: " + currentSelector$
 - Audio file playback (.wav)
 
 ### Phase 8: Advanced Features
-- Search history/suggestions
-- Recently visited list
 - Color themes and UI customization
 - Configuration persistence
 
@@ -341,7 +341,7 @@ For issues or questions:
 
 ---
 
-**Version**: 1.1
-**Last Updated**: February 11, 2026
+**Version**: 1.2
+**Last Updated**: February 12, 2026
 **Author**: Claude
 **Platform**: PicoMite on Raspberry Pi Pico 2W
