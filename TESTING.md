@@ -340,7 +340,63 @@ TEST 3.1.6: Rapid Key Presses
              No display lag or artifacts
 ```
 
-### 3.2 Menu Item Selection
+### 3.2 Edge Scrolling
+
+**Objective**: Verify scrolling past first/last selectable link reveals info text
+
+**Prerequisites**:
+- A Gopher server with info text above and/or below selectable links (e.g., hngopher.com)
+
+**Test Cases**:
+
+```
+TEST 3.2.1: Edge-Scroll Down Past Last Link
+  Steps:
+    1. Load a menu with info text (type i) after the last selectable link
+    2. Navigate down to the last selectable link
+    3. Press Down arrow again
+  Expected: Page scrolls to reveal trailing info text
+  Pass Criteria: Selected link stays on screen
+             Info text below becomes visible
+             Scroll jump is consistent with normal link-to-link navigation
+
+TEST 3.2.2: Edge-Scroll Up Past First Link
+  Steps:
+    1. Load a menu with info text (type i) before the first selectable link
+    2. Navigate up to the first selectable link
+    3. Press Up arrow again
+  Expected: Page scrolls to reveal leading info text (header)
+  Pass Criteria: Selected link stays on screen
+             Info text above becomes visible
+             Scroll jump is consistent with normal link-to-link navigation
+
+TEST 3.2.3: Edge-Scroll Stops at Menu Boundary
+  Steps:
+    1. Edge-scroll down until all trailing info text is visible
+    2. Press Down arrow again
+  Expected: No further scrolling (page already shows end of menu)
+  Pass Criteria: Display remains stable
+             No blank lines or artifacts
+
+TEST 3.2.4: Edge-Scroll Does Not Affect Normal Navigation
+  Steps:
+    1. Navigate between selectable links on the same page
+    2. Verify fast 2-line cursor update (no full redraw)
+  Expected: Normal up/down between visible links uses fast cursor update
+  Pass Criteria: Only old and new cursor lines repainted
+             No flicker or full page redraw
+
+TEST 3.2.5: New Menu Resets Page Position
+  Steps:
+    1. Edge-scroll to an offset position
+    2. Select a link to navigate to a new menu
+    3. Verify new menu starts at the top
+  Expected: pageStart resets to 0 on new menu load
+  Pass Criteria: First items visible at top of screen
+             No stale scroll position from previous menu
+```
+
+### 3.3 Menu Item Selection
 
 **Objective**: Verify Enter key selects items correctly
 
@@ -389,7 +445,7 @@ TEST 3.2.5: Select Search Item (Type 7)
              Keyboard input accepted
 ```
 
-### 3.3 History & Back Navigation
+### 3.4 History & Back Navigation
 
 **Objective**: Verify back button and history stack
 
@@ -938,6 +994,11 @@ Use this checklist to track testing progress:
 - [ ] Navigation boundaries (up/down)
 - [ ] Page scrolling (large menu)
 - [ ] Rapid key presses
+- [ ] Edge-scroll down past last link
+- [ ] Edge-scroll up past first link
+- [ ] Edge-scroll stops at menu boundary
+- [ ] Edge-scroll does not affect normal navigation
+- [ ] New menu resets page position
 - [ ] Type 0 selection (text viewer)
 - [ ] Type 1 selection (new menu)
 - [ ] Type i selection (no-op)
@@ -1035,8 +1096,8 @@ When all tests pass:
 
 **Signed Off By**: ________________
 **Date**: ________________
-**Version**: 1.1
+**Version**: 1.3.1
 
 ---
 
-**Last Updated**: February 11, 2026
+**Last Updated**: February 12, 2026

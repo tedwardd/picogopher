@@ -14,6 +14,7 @@ A lightweight Gopher protocol browser for the Raspberry Pi Pico 2W running PicoM
 - **Error Recovery**: Interactive retry/back/home options on connection failures
 - **Help Menu**: Press '?' for a full list of key bindings
 - **Flicker-Free Scrolling**: Optimized rendering with in-place line overwriting and differential cursor updates
+- **Edge Scrolling**: View info text beyond first/last selectable link by continuing to scroll past menu boundaries
 - **Simple Display**: Works with graphics LCD displays (~320x320 pixels)
 - **WiFi Connectivity**: Browse public Gopher servers over WiFi
 
@@ -151,9 +152,9 @@ Edit `gopher.bas` to adjust for your display:
 ```basic
 CONST SCREEN_WIDTH = 320       ' Width in pixels
 CONST SCREEN_HEIGHT = 320      ' Height in pixels
-CONST LINE_HEIGHT = 10         ' Pixels per line
+CONST LINE_HEIGHT = 12         ' Pixels per line
 CONST CHARS_PER_LINE = 40      ' Characters visible per line
-CONST LINES_PER_PAGE = 25      ' Menu items per page
+CONST LINES_PER_PAGE = 21      ' Menu items per page
 ```
 
 ### Memory Limits
@@ -341,7 +342,7 @@ For issues or questions:
 
 ---
 
-**Version**: 1.2
+**Version**: 1.3.1
 **Last Updated**: February 12, 2026
 **Author**: Claude
 **Platform**: PicoMite on Raspberry Pi Pico 2W

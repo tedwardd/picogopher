@@ -8,31 +8,40 @@ This document provides guidance for developers extending or modifying the PicoGo
 
 ```
 gopher.bas (Main Program)
-├── Configuration & Constants (Lines 1-37)
-├── Global Variables (Lines 39-82)
-├── Phase 1: Network & Protocol (Lines 84-260)
+├── Configuration & Constants (Lines 1-43)
+├── Global Variables (Lines 45-119)
+├── Phase 1: Network & Protocol (Lines 121-332)
 │   ├── InitWiFi()
 │   ├── GopherConnect/Send/Close()
 │   ├── ReadGopherLine()
+│   ├── ShowError$()
 │   └── ParseMenuLine()
-├── Phase 2: Display & Navigation (Lines 262-495)
+├── Phase 2: Display & Navigation (Lines 334-768)
 │   ├── DisplayMenu()
+│   ├── UpdateMenuCursor()
 │   ├── DisplayTextPage()
 │   ├── HandleInput()
 │   ├── PushHistory()
 │   └── NavigateBack()
-├── Phase 3: Text Viewer (Lines 497-580)
+├── Phase 3: Text Viewer (Lines 770-928)
+│   ├── WrapAndStoreLine()
 │   └── ViewTextFile()
-├── Phase 4: Bookmarks (Lines 582-685)
+├── Phase 4: Bookmarks (Lines 930-1050)
 │   ├── SaveBookmark()
 │   └── ShowBookmarks()
-├── Phase 5: Menu Fetcher (Lines 687-790)
+├── Phase 4B: Recently Visited (Lines 1052-1147)
+│   ├── PushRecent()
+│   └── ShowRecent()
+├── Phase 4C: Help (Lines 1149-1184)
+│   └── ShowHelp()
+├── Phase 5: Menu Fetcher (Lines 1186-1368)
 │   ├── FetchAndDisplayMenu()
 │   └── NavigateToItem()
-├── Phase 6: Search & Address Bar (Lines 792-870)
+├── Phase 6: Search & Address Bar (Lines 1370-1499)
+│   ├── PushSearchHistory()
 │   ├── SearchGopher()
 │   └── GotoCustomAddress()
-└── Main Program & Entry (Lines 872-943)
+└── Main Program & Entry (Lines 1501-1564)
     ├── Main()
     └── FILE_EXISTS()
 ```
@@ -173,9 +182,9 @@ Display constants:
 ```basic
 CONST SCREEN_WIDTH = 320       ' Change for different LCD
 CONST SCREEN_HEIGHT = 320
-CONST LINE_HEIGHT = 10         ' Pixel height per text line
+CONST LINE_HEIGHT = 12         ' Pixel height per text line
 CONST CHARS_PER_LINE = 40      ' Characters visible per line
-CONST LINES_PER_PAGE = 25      ' Menu items per screen
+CONST LINES_PER_PAGE = 21      ' Menu items per screen
 ```
 
 **Recalculate if changing screen size:**
@@ -628,7 +637,11 @@ Before releasing a new version:
 - [x] Differential cursor updates for Up/Down navigation
 - [x] Padded line rendering across all screens
 
-### Medium Term (v1.3)
+### Short Term (v1.3/1.3.1) -- DONE
+- [x] Edge-scrolling past first/last selectable link to reveal info text
+- [x] Consistent multi-line scroll jumps for edge-scrolling and link navigation
+
+### Medium Term (v1.4)
 - [ ] Image file support (type g)
 - [ ] Binary file download to SD
 - [ ] Menu caching on SD card
