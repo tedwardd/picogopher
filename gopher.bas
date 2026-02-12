@@ -1,7 +1,7 @@
 ' gopher.bas - PicoGopher Client for PicoMite
 ' ================================================
 ' A Gopher protocol browser for Raspberry Pi Pico with WiFi
-' Version: 1.1
+' Version: 1.3.1
 ' Author: Claude
 ' Last Modified: 2026-02-12
 '
@@ -15,7 +15,7 @@
 ' CONFIGURATION & CONSTANTS
 ' ================================================
 
-CONST VERSION$ = "1.3"
+CONST VERSION$ = "1.3.1"
 CONST DEFAULT_HOST$ = "gopher.floodgap.com"
 CONST DEFAULT_PORT = 70
 
@@ -76,6 +76,8 @@ DIM currentPort = DEFAULT_PORT
 DIM pageStart AS INTEGER
 DIM pageEnd AS INTEGER
 DIM menuScrollX AS INTEGER
+DIM firstSelectable AS INTEGER
+DIM lastSelectable AS INTEGER
 
 ' History stack
 DIM histHost$(MAX_HISTORY) LENGTH 64          '  10 x  65 =    650 bytes
@@ -341,7 +343,9 @@ SUB DisplayMenu()
   menuDirty = 0
 
   ' Calculate page range
-  pageStart = MAX(0, selectedIndex - LINES_PER_PAGE / 2)
+  IF selectedIndex < pageStart OR selectedIndex > pageStart + LINES_PER_PAGE - 1 THEN
+    pageStart = MAX(0, selectedIndex - LINES_PER_PAGE / 2)
+  ENDIF
   pageEnd = MIN(menuCount - 1, pageStart + LINES_PER_PAGE - 1)
 
   IF pageEnd < pageStart + LINES_PER_PAGE - 1 THEN
@@ -581,6 +585,19 @@ SUB HandleInput()
         ELSE
           selectedIndex = newIdx
           statusMsg$ = ""
+          ' At first selectable, use minimum-scroll (item at top) so
+          ' header info stays hidden and edge-scroll can reveal it
+          IF newIdx = firstSelectable THEN
+            pageStart = newIdx
+          ENDIF
+          menuDirty = 1
+        ENDIF
+      ELSE
+        ' No selectable above - scroll to show leading info text
+        LOCAL minStart
+        minStart = MAX(0, selectedIndex - LINES_PER_PAGE + 1)
+        IF pageStart > minStart THEN
+          pageStart = minStart
           menuDirty = 1
         ENDIF
       ENDIF
@@ -602,11 +619,24 @@ SUB HandleInput()
           ELSE
             selectedIndex = newIdx
             statusMsg$ = ""
+            ' At last selectable, use minimum-scroll (item at bottom) so
+            ' footer info stays hidden and edge-scroll can reveal it
+            IF newIdx = lastSelectable THEN
+              pageStart = MAX(0, newIdx - LINES_PER_PAGE + 1)
+            ENDIF
             menuDirty = 1
           ENDIF
         ELSE
           selectedIndex = newIdx
           statusMsg$ = ""
+          menuDirty = 1
+        ENDIF
+      ELSE
+        ' No selectable below - scroll to show trailing info text
+        LOCAL maxStart
+        maxStart = MIN(selectedIndex, MAX(0, menuCount - LINES_PER_PAGE))
+        IF pageStart < maxStart THEN
+          pageStart = maxStart
           menuDirty = 1
         ENDIF
       ENDIF
@@ -1166,6 +1196,7 @@ SUB FetchAndDisplayMenu()
   menuCount = 0
   selectedIndex = 0
   menuScrollX = 0
+  pageStart = 0
 
   ' Connection retry loop
   DO
@@ -1260,6 +1291,17 @@ SUB FetchAndDisplayMenu()
   LOOP
 
   GopherClose()
+
+  ' Find first and last selectable (non-info) items for edge-scrolling
+  LOCAL si
+  firstSelectable = -1
+  lastSelectable = -1
+  FOR si = 0 TO menuCount - 1
+    IF menuType$(si) <> "i" THEN
+      IF firstSelectable = -1 THEN firstSelectable = si
+      lastSelectable = si
+    ENDIF
+  NEXT si
 
   ' Track this page in recently visited list
   LOCAL pageTitle$
